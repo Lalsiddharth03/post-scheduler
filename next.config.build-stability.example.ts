@@ -2,9 +2,6 @@ import type { NextConfig } from "next";
 import path from "node:path";
 import { withBuildStability } from "./src/lib/build-stability/next-integration";
 
-// Loader path from orchids-visual-edits - use direct resolve to get the actual file
-const loaderPath = require.resolve('orchids-visual-edits/loader.js');
-
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
@@ -25,14 +22,6 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  turbopack: {
-    rules: {
-      "*.{jsx,tsx}": {
-        loaders: [loaderPath]
-      }
-    }
-  },
-  allowedDevOrigins: ['*.orchids.page'],
 } as NextConfig;
 
 // Apply build stability plugin

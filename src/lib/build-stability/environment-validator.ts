@@ -6,6 +6,8 @@
  */
 
 import { ValidationResult, ValidationError, ValidationWarning, ValidationMetrics } from './types';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export interface EnvironmentValidationOptions {
   checkRequired?: boolean;
@@ -103,6 +105,43 @@ export class EnvironmentValidator {
   ];
 
   /**
+   * Loads environment variables from .env.local file
+   */
+  private loadEnvironmentFile(): Record<string, string> {
+    const envPath = path.join(process.cwd(), '.env.local');
+    const envVars: Record<string, string> = {};
+
+    try {
+      if (fs.existsSync(envPath)) {
+        const envContent = fs.readFileSync(envPath, 'utf8');
+        const lines = envContent.split('\n');
+
+        for (const line of lines) {
+          const trimmedLine = line.trim();
+          if (trimmedLine && !trimmedLine.startsWith('#')) {
+            const [key, ...valueParts] = trimmedLine.split('=');
+            if (key && valueParts.length > 0) {
+              const value = valueParts.join('=').trim();
+              envVars[key.trim()] = value;
+            }
+          }
+        }
+      }
+    } catch (error) {
+      // Silently ignore file read errors
+    }
+
+    return envVars;
+  }
+
+  /**
+   * Gets environment variable value from process.env or .env.local
+   */
+  private getEnvironmentVariable(name: string, envFileVars: Record<string, string>): string | undefined {
+    return process.env[name] || envFileVars[name];
+  }
+
+  /**
    * Validates environment variables and configuration
    */
   async validateEnvironment(options: EnvironmentValidationOptions = {}): Promise<EnvironmentValidationResult> {
@@ -113,20 +152,23 @@ export class EnvironmentValidator {
     const inconsistentVariables: string[] = [];
     const configurationIssues: ConfigurationIssue[] = [];
 
-    const currentEnv = options.environment || process.env.NODE_ENV || 'development';
+    // Load environment variables from .env.local file
+    const envFileVars = this.loadEnvironmentFile();
+    
+    const currentEnv = options.environment || this.getEnvironmentVariable('NODE_ENV', envFileVars) || 'development';
 
     // Check required variables
     if (options.checkRequired !== false) {
-      this.validateRequiredVariables(currentEnv, errors, missingVariables, configurationIssues);
+      this.validateRequiredVariables(currentEnv, errors, missingVariables, configurationIssues, envFileVars);
     }
 
     // Check consistency between environments
     if (options.checkConsistency !== false) {
-      this.validateEnvironmentConsistency(currentEnv, warnings, inconsistentVariables, configurationIssues);
+      this.validateEnvironmentConsistency(currentEnv, warnings, inconsistentVariables, configurationIssues, envFileVars);
     }
 
     // Validate specific configuration values
-    this.validateConfigurationValues(errors, warnings, configurationIssues);
+    this.validateConfigurationValues(errors, warnings, configurationIssues, envFileVars);
 
     const validationTime = Date.now() - startTime;
     const metrics: ValidationMetrics = {
@@ -155,7 +197,8 @@ export class EnvironmentValidator {
     environment: string,
     errors: ValidationError[],
     missingVariables: string[],
-    configurationIssues: ConfigurationIssue[]
+    configurationIssues: ConfigurationIssue[],
+    envFileVars: Record<string, string>
   ): void {
     for (const variable of this.requiredVariables) {
       // Skip if not required for current environment
@@ -163,7 +206,7 @@ export class EnvironmentValidator {
         continue;
       }
 
-      const value = process.env[variable.name];
+      const value = this.getEnvironmentVariable(variable.name, envFileVars);
 
       if (!value) {
         if (variable.required) {
@@ -215,11 +258,12 @@ export class EnvironmentValidator {
     currentEnv: string,
     warnings: ValidationWarning[],
     inconsistentVariables: string[],
-    configurationIssues: ConfigurationIssue[]
+    configurationIssues: ConfigurationIssue[],
+    envFileVars: Record<string, string>
   ): void {
     // Check for development-specific configurations in production
     if (currentEnv === 'production') {
-      const logLevel = process.env.LOG_LEVEL;
+      const logLevel = this.getEnvironmentVariable('LOG_LEVEL', envFileVars);
       if (logLevel === 'debug') {
         inconsistentVariables.push('LOG_LEVEL');
         warnings.push({
@@ -239,7 +283,7 @@ export class EnvironmentValidator {
       }
 
       // Check for missing production-specific variables
-      const cronSecret = process.env.CRON_SECRET;
+      const cronSecret = this.getEnvironmentVariable('CRON_SECRET', envFileVars);
       if (!cronSecret || cronSecret.trim() !== cronSecret || cronSecret.length < 16) {
         inconsistentVariables.push('CRON_SECRET');
         configurationIssues.push({
@@ -254,7 +298,7 @@ export class EnvironmentValidator {
 
     // Check for production configurations in development
     if (currentEnv === 'development') {
-      const alertingEnabled = process.env.ALERTING_ENABLED;
+      const alertingEnabled = this.getEnvironmentVariable('ALERTING_ENABLED', envFileVars);
       if (alertingEnabled === 'true') {
         warnings.push({
           type: 'PERFORMANCE',
@@ -280,7 +324,8 @@ export class EnvironmentValidator {
   private validateConfigurationValues(
     errors: ValidationError[],
     warnings: ValidationWarning[],
-    configurationIssues: ConfigurationIssue[]
+    configurationIssues: ConfigurationIssue[],
+    envFileVars: Record<string, string>
   ): void {
     // Validate numeric configurations
     const numericConfigs = [
@@ -291,7 +336,7 @@ export class EnvironmentValidator {
     ];
 
     for (const config of numericConfigs) {
-      const value = process.env[config.name];
+      const value = this.getEnvironmentVariable(config.name, envFileVars);
       if (value) {
         const numValue = parseInt(value);
         if (isNaN(numValue) || numValue < config.min || numValue > config.max) {
@@ -315,7 +360,7 @@ export class EnvironmentValidator {
     }
 
     // Validate timezone configuration
-    const defaultTimezone = process.env.DEFAULT_TIMEZONE;
+    const defaultTimezone = this.getEnvironmentVariable('DEFAULT_TIMEZONE', envFileVars);
     if (defaultTimezone && !this.isValidTimezone(defaultTimezone)) {
       warnings.push({
         type: 'DEPRECATED_IMPORT',

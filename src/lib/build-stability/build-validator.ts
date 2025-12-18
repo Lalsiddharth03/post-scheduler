@@ -316,9 +316,9 @@ export class BuildValidator implements IBuildValidator {
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
         
-        if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+        if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules' && entry.name !== '__tests__') {
           files.push(...this.getSourceFiles(fullPath));
-        } else if (entry.isFile() && /\.(ts|tsx|js|jsx)$/.test(entry.name)) {
+        } else if (entry.isFile() && /\.(ts|tsx|js|jsx)$/.test(entry.name) && !this.isTestFile(entry.name)) {
           files.push(fullPath);
         }
       }
@@ -328,6 +328,10 @@ export class BuildValidator implements IBuildValidator {
     }
     
     return files;
+  }
+
+  private isTestFile(fileName: string): boolean {
+    return /\.(test|spec)\.(ts|tsx|js|jsx)$/.test(fileName);
   }
 
   private detectUnusedImports(
