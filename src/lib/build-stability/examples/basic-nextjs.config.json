@@ -1,0 +1,7 @@
+{
+  "sourceDir": "./src",
+  "buildCommand": "npm run build",
+  "skipExternalDependencies": false,
+  "checkEnvironment": true,
+  "environmentMode": "development"
+}

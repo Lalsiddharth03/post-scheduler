@@ -1,0 +1,18 @@
+{
+  "sourceDir": "src",
+  "buildCommand": "npm run build",
+  "skipExternalDependencies": true,
+  "checkEnvironment": true,
+  "environmentMode": "production",
+  "validation": {
+    "mode": "strict",
+    "failOnWarnings": false,
+    "outputValidationResults": true,
+    "skipEnvironmentValidation": false,
+    "skipPreBuildValidation": false
+  },
+  "nextjs": {
+    "enabled": true,
+    "integrationMode": "plugin"
+  }
+}
